@@ -4,13 +4,12 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(__dirname));
 
-// Proxy endpoint — keeps your API key hidden from users
 app.post('/api/analyze', async (req, res) => {
   const { resumeText } = req.body;
 
@@ -18,7 +17,7 @@ app.post('/api/analyze', async (req, res) => {
     return res.status(400).json({ error: 'Resume text too short or missing.' });
   }
 
-  if (!ANTHROPIC_API_KEY) {
+  if (!GEMINI_API_KEY) {
     return res.status(500).json({ error: 'API key not configured on server.' });
   }
 
@@ -29,7 +28,7 @@ Resume Text:
 ${resumeText.slice(0, 6000)}
 """
 
-Return ONLY a valid JSON object (no markdown, no explanation) with this exact structure:
+Return ONLY a valid JSON object (no markdown, no explanation, no backticks) with this exact structure:
 {
   "atsScore": <integer 0-100>,
   "scoreTag": <"Excellent" | "Good" | "Fair" | "Needs Work">,
@@ -60,27 +59,24 @@ Return ONLY a valid JSON object (no markdown, no explanation) with this exact st
 }`;
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1500,
-        messages: [{ role: 'user', content: prompt }]
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 1500 }
       })
     });
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      return res.status(response.status).json({ error: err.error?.message || 'Claude API error.' });
+      return res.status(response.status).json({ error: err.error?.message || 'Gemini API error.' });
     }
 
     const data = await response.json();
-    const rawText = data.content.map(b => b.text || '').join('');
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const clean = rawText.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
     res.json(parsed);
@@ -90,7 +86,6 @@ Return ONLY a valid JSON object (no markdown, no explanation) with this exact st
   }
 });
 
-// Fallback: serve index.html for any other route
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
