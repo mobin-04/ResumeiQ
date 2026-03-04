@@ -8,7 +8,7 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
 // Proxy endpoint — keeps your API key hidden from users
 app.post('/api/analyze', async (req, res) => {
@@ -92,7 +92,7 @@ Return ONLY a valid JSON object (no markdown, no explanation) with this exact st
 
 // Fallback: serve index.html for any other route
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(PORT, () => {
